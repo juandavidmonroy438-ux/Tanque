@@ -21,7 +21,7 @@
     --amber: #e8a355;
   }
   * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; }
+  html, body { height: 100%; margin: 0; padding: 0; width: 100%; }
   body {
     background:
       linear-gradient(var(--grid-line) 1px, transparent 1px) 0 0/ 100% 34px,
@@ -56,9 +56,12 @@
   .corner-br { bottom: -1px; right: -1px; border-bottom: 2px solid var(--cyan); border-right: 2px solid var(--cyan); }
 
   .grid-main { display: grid; grid-template-columns: 230px 1fr; gap: 28px; }
-  @media (max-width: 620px) { .grid-main { grid-template-columns: 1fr; } }
+  @media (max-width: 620px) {
+    body { padding: 16px 10px; }
+    .frame { padding: 18px; }
+    .grid-main { grid-template-columns: 1fr; }
+  }
 
-  /* ---------- Tanque ---------- */
   .tank-col { display: flex; flex-direction: column; align-items: center; }
   .tank-wrap { position: relative; width: 210px; height: 240px; }
   .tank-wrap svg { display: block; width: 100%; height: 100%; }
@@ -79,10 +82,8 @@
   #valor { font-size: 38px; font-weight: 600; line-height: 1; text-shadow: 0 1px 6px rgba(0,0,0,.65); }
   #valor .unidad { font-size: 18px; margin-left: 2px; opacity: .8; }
   .tank-label { margin-top: 6px; font-size: 11.5px; color: var(--text); text-shadow: 0 1px 4px rgba(0,0,0,.7); }
-
   .aviso { margin-top: 12px; min-height: 18px; font-size: 12px; color: var(--amber); text-align: center; }
 
-  /* ---------- Datos ---------- */
   .stat-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px; background: var(--border); border: 1px solid var(--border); margin-bottom: 20px; }
   .stat { background: var(--panel-2); padding: 12px 14px; }
   .stat .k { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
@@ -95,7 +96,7 @@
   .log-row:last-child { border-bottom: none; }
   .log-row .t { color: var(--muted); }
   .log-empty { padding: 14px; font-size: 12.5px; color: var(--muted); text-align: center; }
-  .footer { display: flex; justify-content: space-between; margin-top: 14px; font-size: 11.5px; color: var(--muted); }
+  .footer { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 14px; font-size: 11.5px; color: var(--muted); }
   .footer .v.error { color: var(--amber); }
 
   @media (prefers-reduced-motion: reduce) { .ola, .live-dot { animation: none; } #agua { transition: none; } }
@@ -136,7 +137,6 @@
                   </g>
                 </g>
               </g>
-              <!-- Escala: 100% en y=20, 0% en y=210 -->
               <g>
                 <line class="tick" x1="150" y1="20"  x2="158" y2="20"/>
                 <line class="tick" x1="150" y1="67.5" x2="158" y2="67.5"/>
@@ -191,16 +191,14 @@
   </div>
 
 <script>
-  // Debe coincidir con el canal (c=) que usa el ESP32 al enviar el dato
+  // Debe coincidir con el id y el canal (c=) que usa el ESP32 al enviar el dato
   const URL_SENSOR = "https://cygnus.uniajc.edu.co/appis/ldispositivo.php?id=217&c=dht1";
   const INTERVALO_MS = 2000;
   const MAX_HISTORIAL = 20;
   const MAX_LOG = 6;
-  const NIVEL_BAJO = 20;      // % por debajo del cual se muestra alerta
+  const NIVEL_BAJO = 20;
 
-  // Geometría del tanque en el SVG: 100% -> y=20, 0% -> y=210
   const Y_LLENO = 20, Y_VACIO = 210;
-
   const historial = [];
 
   const elValor = document.getElementById("valor");
@@ -220,7 +218,6 @@
     const p = Math.max(0, Math.min(100, pct));
     const y = p <= 0 ? Y_VACIO + 12 : Y_VACIO - (Y_VACIO - Y_LLENO) * p / 100;
     elAgua.style.transform = "translateY(" + y.toFixed(1) + "px)";
-
     const bajo = p < NIVEL_BAJO;
     elTank.classList.toggle("low", bajo);
     elAviso.textContent = bajo ? "Nivel bajo: conviene llenar el tanque" : "";
@@ -230,10 +227,9 @@
     if (historial.length < 2) { elSparkLine.setAttribute("points", ""); return; }
     const paso = 300 / (MAX_HISTORIAL - 1);
     const offset = MAX_HISTORIAL - historial.length;
-    // Escala fija 0-100% para ver la subida/bajada real del tanque
     const pts = historial.map((valor, i) => {
       const x = (offset + i) * paso;
-      const y = 52 - (valor / 100) * 48;
+      const y = 52 - (Math.max(0, Math.min(100, valor)) / 100) * 48;
       return x.toFixed(1) + "," + y.toFixed(1);
     }).join(" ");
     elSparkLine.setAttribute("points", pts);
@@ -256,23 +252,24 @@
 
   async function leerSensor() {
     try {
-      const respuesta = await fetch(URL_SENSOR, { cache: "no-store" });
+      // fetch simple (como en el ejemplo del profe); &t= evita respuestas guardadas en caché
+      const respuesta = await fetch(URL_SENSOR + "&t=" + Date.now());
       if (!respuesta.ok) throw new Error("HTTP " + respuesta.status);
 
       const texto = (await respuesta.text()).trim();
-      const numero = parseFloat(texto.replace(",", "."));
+      const m = texto.match(/-?\d+(?:[.,]\d+)?/);
+      if (!m) throw new Error("sin valor numérico en la respuesta");
+
+      const numero = parseFloat(m[0].replace(",", "."));
       const hora = new Date().toLocaleTimeString();
 
-      elValor.innerHTML = (isNaN(numero) ? texto : numero.toFixed(0)) + '<span class="unidad">%</span>';
-
-      if (!isNaN(numero)) {
-        pintarTanque(numero);
-        historial.push(numero);
-        if (historial.length > MAX_HISTORIAL) historial.shift();
-        actualizarSparkline();
-        actualizarStats();
-        agregarLog(numero, hora);
-      }
+      elValor.innerHTML = numero.toFixed(0) + '<span class="unidad">%</span>';
+      pintarTanque(numero);
+      historial.push(numero);
+      if (historial.length > MAX_HISTORIAL) historial.shift();
+      actualizarSparkline();
+      actualizarStats();
+      agregarLog(numero, hora);
 
       elEstadoValor.classList.remove("error");
       elEstadoValor.textContent = "ok · " + hora;
