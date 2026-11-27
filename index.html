@@ -25,7 +25,7 @@
 
 <script>
 // ====== CONFIGURACIÓN (ajusta si hace falta) ======
-const ENDPOINT = "https://cygnus.uniajc.edu.co/proyecto1/aiot/aiot20262/ProyectoTanque/ldispositivo.php?id=217";
+const ENDPOINT = "https://cygnus.uniajc.edu.co/appis/ldispositivo.php?id=211&c=hc1";
 const CADA_MS  = 3000;      // cada cuántos ms consulta
 const CLAVE    = "";        // si la respuesta es JSON, nombre del campo (vacío = detecta el primer número)
 // ==================================================
@@ -57,6 +57,7 @@ async function leer(){
       const r = await fetch(ruta(ENDPOINT) + (ENDPOINT.includes("?")?"&":"?") + "_=" + Date.now(), {cache:"no-store"});
       if (!r.ok) throw new Error("HTTP " + r.status);
       const t = await r.text();
+      if (/^\s*<(!doctype|html)/i.test(t)) throw new Error("el servidor devolvió una página HTML (ruta incorrecta)");
       const n = extraerNumero(t);
       if (isNaN(n)) throw new Error("sin número en la respuesta");
       const p = Math.max(0, Math.min(100, n));
